@@ -13,6 +13,9 @@ android {
         buildConfig false
     }
     buildTypes {
+        debug {
+            defaultConfig.minSdkVersion 24
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -28,7 +31,7 @@ dependencies {
     api project(':aidl')
     api project(':shared')
 
-    implementation "androidx.annotation:annotation:1.2.0"
+    implementation 'androidx.annotation:annotation:1.3.0'
 }
 
 ext {

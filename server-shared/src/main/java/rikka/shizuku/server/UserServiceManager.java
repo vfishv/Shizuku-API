@@ -18,7 +18,9 @@ import android.os.IBinder;
 import android.util.ArrayMap;
 
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -37,6 +39,7 @@ public abstract class UserServiceManager {
 
     private final Executor executor = Executors.newSingleThreadExecutor();
     private final Map<String, UserServiceRecord> userServiceRecords = Collections.synchronizedMap(new ArrayMap<>());
+    private final Map<String, List<UserServiceRecord>> packageUserServiceRecords = Collections.synchronizedMap(new ArrayMap<>());
 
     public UserServiceManager() {
     }
@@ -83,7 +86,7 @@ public abstract class UserServiceManager {
         }
     }
 
-    public int addUserService(IShizukuServiceConnection conn, Bundle options) {
+    public int addUserService(IShizukuServiceConnection conn, Bundle options, int callingApiVersion) {
         Objects.requireNonNull(conn, "connection is null");
         Objects.requireNonNull(options, "options is null");
 
@@ -110,13 +113,27 @@ public abstract class UserServiceManager {
         synchronized (this) {
             UserServiceRecord record = getUserServiceRecordLocked(key);
             if (noCreate) {
-                if (record != null && record.service != null && record.service.pingBinder()) {
-                    record.broadcastBinderReceived();
-                    return 0;
+                if (record != null) {
+                    record.callbacks.register(conn);
+
+                    if (record.service != null && record.service.pingBinder()) {
+                        record.broadcastBinderReceived();
+
+                        if (callingApiVersion >= 13) {
+                            return record.versionCode;
+                        } else {
+                            return 0;
+                        }
+                    }
                 }
-                return 1;
+
+                if (callingApiVersion >= 13) {
+                    return -1;
+                } else {
+                    return 1;
+                }
             } else {
-                UserServiceRecord newRecord = createUserServiceRecordIfNeededLocked(record, key, versionCode, daemon, sourceDir);
+                UserServiceRecord newRecord = createUserServiceRecordIfNeededLocked(record, key, versionCode, daemon, packageInfo);
                 newRecord.callbacks.register(conn);
 
                 if (newRecord.service != null && newRecord.service.pingBinder()) {
@@ -136,7 +153,7 @@ public abstract class UserServiceManager {
     }
 
     private UserServiceRecord createUserServiceRecordIfNeededLocked(
-            UserServiceRecord record, String key, int versionCode, boolean daemon, String apkPath) {
+            UserServiceRecord record, String key, int versionCode, boolean daemon, PackageInfo packageInfo) {
 
         if (record != null) {
             if (record.versionCode != versionCode) {
@@ -165,10 +182,18 @@ public abstract class UserServiceManager {
             }
         };
 
-        onUserServiceRecordCreated(record, apkPath);
+        String packageName = packageInfo.packageName;
+        List<UserServiceRecord> list = packageUserServiceRecords.get(packageName);
+        if (list == null) {
+            list = Collections.synchronizedList(new ArrayList<>());
+            packageUserServiceRecords.put(packageName, list);
+        }
+        list.add(record);
+
+        onUserServiceRecordCreated(record, packageInfo);
 
         userServiceRecords.put(key, record);
-        LOGGER.i("New service record %s (%s): version=%d, daemon=%s, apk=%s", key, record.token, versionCode, Boolean.toString(daemon), apkPath);
+        LOGGER.i("New service record %s (%s): version=%d, daemon=%s, apk=%s", key, record.token, versionCode, Boolean.toString(daemon), packageInfo.applicationInfo.sourceDir);
         return record;
     }
 
@@ -228,12 +253,23 @@ public abstract class UserServiceManager {
         }
     }
 
-    public void onUserServiceRecordCreated(UserServiceRecord record, String apkPath) {
+    public void onUserServiceRecordCreated(UserServiceRecord record, PackageInfo packageInfo) {
 
     }
 
     public void onUserServiceRecordRemoved(UserServiceRecord record) {
 
+    }
+
+    public void removeUserServicesForPackage(String packageName) {
+        List<UserServiceRecord> list = packageUserServiceRecords.get(packageName);
+        if (list != null) {
+            for (UserServiceRecord record : list) {
+                record.removeSelf();
+                LOGGER.i("Remove user service %s for package %s", record.token, packageName);
+            }
+            packageUserServiceRecords.remove(packageName);
+        }
     }
 
 }

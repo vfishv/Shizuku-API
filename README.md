@@ -1,8 +1,6 @@
 # Shizuku-API
 
-Shizuku API is the API provided by [Shizuku](https://github.com/RikkaApps/Shizuku) and [Sui](https://github.com/RikkaApps/Sui). With Shizuku API, your app will be able to use Android APIs (almost) directly with Java or Kotlin, and as the identity of root or shell (adb).
-
-Shizuku and Sui share the API design. As the application developer, you only need to write the code once to support both Shizuku and Sui.
+Shizuku API is the API provided by [Shizuku](https://github.com/RikkaApps/Shizuku) and [Sui](https://github.com/RikkaApps/Sui). With Shizuku API, you can your Java codes (JNI is also supported) as the identity of root or shell (adb).
 
 ## Requirements
 
@@ -33,7 +31,7 @@ I'll say the difficult words first, using Shizuku APIs is similar to framework o
 ![Maven Central](https://img.shields.io/maven-central/v/dev.rikka.shizuku/api)
 
 ```groovy
-def shizuku_version = '12.1.0'
+def shizuku_version = (the versoin above)
 implementation "dev.rikka.shizuku:api:$shizuku_version"
 
 // Add this line if you want to support Shizuku
@@ -42,9 +40,11 @@ implementation "dev.rikka.shizuku:provider:$shizuku_version"
 
 ### Acquire the Binder
 
-Before using Shizuku APIs, you need to acquire the Binder from Shizuku or Sui.
+The first step is to acquire the Binder from Shizuku or Sui.
 
-`Shizuku` provides listeners, `Shizuku#addBinderReceivedListener()` and `Shizuku.addBinderDeadListener()`, that allows you to track the life of the binder. You should call methods in `Shizuku` class when the binder is alive or you will get an `IllegalStateException`.
+`Shizuku` class provides listeners, `Shizuku#addBinderReceivedListener()` and `Shizuku.addBinderDeadListener()`, that allows you to track the life of the binder. You should call methods in `Shizuku` class when the binder is alive or you will get an `IllegalStateException`.
+
+The steps to get a Binder from Shizuku and Shizuku are different.
 
 #### Sui
 
@@ -52,7 +52,7 @@ Call `Sui.init(packageName)` before using `Shizuku` class. This method only need
 
 For multi-process applications, call this method in every process that needs to use Shizuku API.
 
-Note, request the bidner for Sui only requires two times of binder IPC, this is significantly cheaper than initialize Shizuku which uses content provider. `Sui.init(packageName)` can be used in main thread, you don't need to worry about performance.
+Note, request the binder for Sui only requires two times of binder IPC, this is significantly cheaper than initialize Shizuku which uses `ContentProvider`. `Sui.init(packageName)` can be used in main thread, you don't need to worry about performance.
 
 #### Shizuku
 
@@ -72,7 +72,7 @@ Add `ShizukuProvider` to `AndroidManifest.xml`.
 
 For multi-process applications, you need to call `ShizukuProvider.enableMultiProcessSupport()` in every process which needs to use Shizuku API.
 
-Starting from v12.1.0, Sui is initialized automatically in `ShizukuProvider`. You can opt-out this behavior by calling `ShizukuProvider#disableAutomaticSuiInitialization()` before `ShizukuProvider#onCreate()` is called. Note, request the bidner for Sui only requires two times of binder IPC, this is significantly cheaper than initialize Shizuku which uses content provider. Unless there are special reasons, apps that support Shizuku should also support Sui, otherwise it will cause user confusion.
+Starting from v12.1.0, Sui is initialized automatically in `ShizukuProvider`. You can opt-out this behavior by calling `ShizukuProvider#disableAutomaticSuiInitialization()` before `ShizukuProvider#onCreate()` is called. Unless there are special reasons, apps that support Shizuku should also support Sui, otherwise it will cause user confusion.
 
 ### Request permission
 
@@ -85,9 +85,7 @@ private void onRequestPermissionsResult(int requestCode, int grantResult) {
     boolean granted = grantResult == PackageManager.PERMISSION_GRANTED;
     // Do stuff based on the result and the request code
 }
-```
 
-```java
 private final Shizuku.OnRequestPermissionResultListener REQUEST_PERMISSION_RESULT_LISTENER = this::onRequestPermissionsResult;
 
 @Override
@@ -124,27 +122,66 @@ private boolean checkPermission(int code) {
 }
 ```
 
-### Compile with hidden APIs
+### Differents of the privilege betweent ADB and ROOT
 
-[HiddenApiRefinePlugin](https://github.com/RikkaApps/HiddenApiRefinePlugin)
+Shizuku can be started with ADB or ROOT, and Sui is a Magisk module, so the privilege could be ADB or ROOT. You can use `Shizuku#getUid()` to check your privilege, for ROOT it returns `0`, for ADB is `2000`.
 
-### Using Shizuku APIs: Remote binder call
+What ADB can do is significantly different from ROOT:
 
-Call any Android APIs which use binder (such as `getInstalledPackages`) as the identity of root (or adb).
+* In the Android world, the privilege is determined by Android permissions. See [AndroidManifest of Shell](https://cs.android.com/android/platform/superproject/+/master:frameworks/base/packages/Shell/AndroidManifest.xml), all the permission granted to Shell (ADB) are listed here. Be aware, the permission changes under different Android versions.
 
-See `getUsers` and `installApks` in the demo.
+* In Linux world, the privilege is determined by Shell's uid, capabilities, SELinux context, etc. For example, Shell (ADB) cannot access other apps' data files `/data/user/0/<package>`.
 
-This may need the app itself to access hidden APIs, use [AndroidHiddenApiBypass](https://github.com/LSPosed/AndroidHiddenApiBypass) or other libraries you like.
+### Remote binder call
 
-### Using Shizuku APIs：UserService
+This is a relatively simple way, but what you can do is limited to Binder calls. Therefore, this is only suitable for simple applications.
 
-Similar to [Bound services](https://developer.android.com/guide/components/bound-services), but the service runs as the identity of root (or adb). JNI is also supported.
+Shizuku API provides `rikka.shizuku.ShizukuBinderWrapper` class which forward Binder calls to Shizuku service which has ADB or ROOT privilege.
 
-See javadoc of `bindUserService` method which is super detailed.
+### UserService
 
-See `bindUserService` in the demo.
+User Service is like [Bound services](https://developer.android.com/guide/components/bound-services) which allows you to run Java or native codes (through JNI). The difference is that the service runs in a different process and as the identity (Linux UID) of root (UID 0) or shell (UID 2000, if the backend is Shizuku and user starts Shizuku with adb).
+
+There are no restrictions on non-SDK APIs in the user service process. However, the User Service process is not a valid Android application process. Therefore, even if you can acquire a `Context` instance, many APIs, such as `Context#registerReceiver` and `Context#getContentResolver` will not work. You will need to dig into Android source code to find out how things work.
+
+* Start the User Service
+
+  Use `bindUserService` method. This method has two parameters, `UserServiceArgs` and `ServiceConnection`.
+
+  `UserServiceArgs` is like `Intent` in Bound services, which decides which service will be started and some options.
+
+  `ServiceConnection` is same as Bound services, but only `onServiceConnected` and `onServiceDisconnected` are used.
+  
+  Unlike Bound service, the service class must implement `IBinder` interface. The usual usage is `public class YourService extends IYouAidlInterface.Stub`.
+
+  The service class can have two constructors, one is default constructor, another is with `Context` parameter available from Shizuku v13. Shizuku v13 will try the constructor with `Context` parameter first. Older Shizuku will always use the default constructor. Beaware that the `Context` does not work as same as `Context` in normal Android application. See "Use Android APIs in user service" below.
+
+  Shizuku uses `tag` from `UserServiceArgs` to determine if the User Service is same. If `tag` is not set, class name will be uses, but class name is unstable after ProGuard/R8. If `version` from `UserServiceArgs` mismatches, a new User Service will be start and "destroy" method (see below) will be called for the old.
+
+* Stop the User Service
+
+  Use `unbindUserService` method. However, the user service process will **NOT** be killed automatically. You need to implement a "destroy" method in your service. The transaction code for that method is `16777115` (use `16777114` in aidl). In this method, you can do some cleanup jobs and call `System.exit()` in the end.
+
+### The use of non-SDK interfaces
+
+For "Remote binder call", as the APIs are accessed from the app's process, you may need to use [AndroidHiddenApiBypass](https://github.com/LSPosed/AndroidHiddenApiBypass) or any ways you want to bypass restrictions on non-SDK interfaces.
+
+We also provides [HiddenApiRefinePlugin](https://github.com/RikkaApps/HiddenApiRefinePlugin) to help you to programing with hidden APIs conveniently.
 
 ## Changelog
+
+### 13.1.0
+
+- Breaking change: [desugaring](https://developer.android.com/studio/write/java8-support#library-desugaring) is required if min API of your app is 23
+- Listeners now has an optional `Handler` parameter that determines which thread will the listener be called from
+
+### 13.0.0
+
+- The constructor of `UserService` can have a `Context` parameter which value is the `Context` used to create the instance of `UserService`
+
+### 12.2.0
+
+- Fix `onServiceDisconnected` is not called if the UserService is stopped by `Shizuku#unbindUserService`
 
 ### 12.1.0
 
