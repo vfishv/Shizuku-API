@@ -75,6 +75,19 @@ public class DemoActivity extends Activity {
         binding.text2.setText("Using " + (DemoApplication.isSui() ? "Sui" : "Shizuku or nothing is installed") + ".");
 
         binding.text1.setText("Waiting for binder");
+
+
+        binding.btn1.setOnClickListener((v) -> {
+            try {
+                int uid = Shizuku.getUid();
+                binding.tv1.setText("uid:" + uid);
+            } catch (Exception e) {
+                e.printStackTrace();
+                binding.tv1.setText("error:" + e.getMessage());
+            }
+        });
+
+
         binding.button1.setOnClickListener((v) -> {
             if (checkPermission(REQUEST_CODE_BUTTON1)) getUsers();
         });
