@@ -3,7 +3,8 @@ plugins {
 }
 
 android {
-    compileSdkVersion api_target_sdk
+    namespace 'rikka.shizuku.aidl'
+    compileSdk api_target_sdk
     defaultConfig {
         minSdkVersion api_min_sdk
         targetSdkVersion api_target_sdk
@@ -11,6 +12,7 @@ android {
     }
     buildFeatures {
         buildConfig false
+        aidl true
     }
     buildTypes {
         release {

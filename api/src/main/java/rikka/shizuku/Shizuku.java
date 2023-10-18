@@ -26,9 +26,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RestrictTo;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import moe.shizuku.server.IShizukuApplication;
 import moe.shizuku.server.IShizukuService;
@@ -206,9 +206,9 @@ public class Shizuku {
         }
     }
 
-    private static final List<ListenerHolder<OnBinderReceivedListener>> RECEIVED_LISTENERS = new CopyOnWriteArrayList<>();
-    private static final List<ListenerHolder<OnBinderDeadListener>> DEAD_LISTENERS = new CopyOnWriteArrayList<>();
-    private static final List<ListenerHolder<OnRequestPermissionResultListener>> PERMISSION_LISTENERS = new CopyOnWriteArrayList<>();
+    private static final List<ListenerHolder<OnBinderReceivedListener>> RECEIVED_LISTENERS = new ArrayList<>();
+    private static final List<ListenerHolder<OnBinderDeadListener>> DEAD_LISTENERS = new ArrayList<>();
+    private static final List<ListenerHolder<OnRequestPermissionResultListener>> PERMISSION_LISTENERS = new ArrayList<>();
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     /**
@@ -280,7 +280,9 @@ public class Shizuku {
                 MAIN_HANDLER.post(listener::onBinderReceived);
             }
         }
-        RECEIVED_LISTENERS.add(new ListenerHolder<>(listener, handler));
+        synchronized (RECEIVED_LISTENERS) {
+            RECEIVED_LISTENERS.add(new ListenerHolder<>(listener, handler));
+        }
     }
 
     /**
@@ -291,18 +293,22 @@ public class Shizuku {
      * @return If the listener is removed.
      */
     public static boolean removeBinderReceivedListener(@NonNull OnBinderReceivedListener listener) {
-        return RECEIVED_LISTENERS.removeIf(holder -> holder.listener == listener);
+        synchronized (RECEIVED_LISTENERS) {
+            return RECEIVED_LISTENERS.removeIf(holder -> holder.listener == listener);
+        }
     }
 
     private static void scheduleBinderReceivedListeners() {
-        for (ListenerHolder<OnBinderReceivedListener> holder : RECEIVED_LISTENERS) {
-            if (holder.handler != null) {
-                holder.handler.post(holder.listener::onBinderReceived);
-            } else {
-                if (Looper.myLooper() == Looper.getMainLooper()) {
-                    holder.listener.onBinderReceived();
+        synchronized (RECEIVED_LISTENERS) {
+            for (ListenerHolder<OnBinderReceivedListener> holder : RECEIVED_LISTENERS) {
+                if (holder.handler != null) {
+                    holder.handler.post(holder.listener::onBinderReceived);
                 } else {
-                    MAIN_HANDLER.post(holder.listener::onBinderReceived);
+                    if (Looper.myLooper() == Looper.getMainLooper()) {
+                        holder.listener.onBinderReceived();
+                    } else {
+                        MAIN_HANDLER.post(holder.listener::onBinderReceived);
+                    }
                 }
             }
         }
@@ -330,7 +336,9 @@ public class Shizuku {
      * @param handler  Where the listener would be called. If null, the listener will be called in main thread.
      */
     public static void addBinderDeadListener(@NonNull OnBinderDeadListener listener, @Nullable Handler handler) {
-        DEAD_LISTENERS.add(new ListenerHolder<>(listener, handler));
+        synchronized (RECEIVED_LISTENERS) {
+            DEAD_LISTENERS.add(new ListenerHolder<>(listener, handler));
+        }
     }
 
     /**
@@ -340,19 +348,24 @@ public class Shizuku {
      * @return If the listener is removed.
      */
     public static boolean removeBinderDeadListener(@NonNull OnBinderDeadListener listener) {
-        return DEAD_LISTENERS.removeIf(holder -> holder.listener == listener);
+        synchronized (RECEIVED_LISTENERS) {
+            return DEAD_LISTENERS.removeIf(holder -> holder.listener == listener);
+        }
     }
 
     private static void scheduleBinderDeadListeners() {
-        for (ListenerHolder<OnBinderDeadListener> holder : DEAD_LISTENERS) {
-            if (holder.handler != null) {
-                holder.handler.post(holder.listener::onBinderDead);
-            } else {
-                if (Looper.myLooper() == Looper.getMainLooper()) {
-                    holder.listener.onBinderDead();
+        synchronized (RECEIVED_LISTENERS) {
+            for (ListenerHolder<OnBinderDeadListener> holder : DEAD_LISTENERS) {
+                if (holder.handler != null) {
+                    holder.handler.post(holder.listener::onBinderDead);
                 } else {
-                    MAIN_HANDLER.post(holder.listener::onBinderDead);
+                    if (Looper.myLooper() == Looper.getMainLooper()) {
+                        holder.listener.onBinderDead();
+                    } else {
+                        MAIN_HANDLER.post(holder.listener::onBinderDead);
+                    }
                 }
+
             }
         }
     }
@@ -378,7 +391,9 @@ public class Shizuku {
      * @param handler  Where the listener would be called. If null, the listener will be called in main thread.
      */
     public static void addRequestPermissionResultListener(@NonNull OnRequestPermissionResultListener listener, @Nullable Handler handler) {
-        PERMISSION_LISTENERS.add(new ListenerHolder<>(listener, handler));
+        synchronized (RECEIVED_LISTENERS) {
+            PERMISSION_LISTENERS.add(new ListenerHolder<>(listener, handler));
+        }
     }
 
     /**
@@ -388,18 +403,22 @@ public class Shizuku {
      * @return If the listener is removed.
      */
     public static boolean removeRequestPermissionResultListener(@NonNull OnRequestPermissionResultListener listener) {
-        return PERMISSION_LISTENERS.removeIf(holder -> holder.listener == listener);
+        synchronized (RECEIVED_LISTENERS) {
+            return PERMISSION_LISTENERS.removeIf(holder -> holder.listener == listener);
+        }
     }
 
     private static void scheduleRequestPermissionResultListener(int requestCode, int result) {
-        for (ListenerHolder<OnRequestPermissionResultListener> holder : PERMISSION_LISTENERS) {
-            if (holder.handler != null) {
-                holder.handler.post(() -> holder.listener.onRequestPermissionResult(requestCode, result));
-            } else {
-                if (Looper.myLooper() == Looper.getMainLooper()) {
-                    holder.listener.onRequestPermissionResult(requestCode, result);
+        synchronized (RECEIVED_LISTENERS) {
+            for (ListenerHolder<OnRequestPermissionResultListener> holder : PERMISSION_LISTENERS) {
+                if (holder.handler != null) {
+                    holder.handler.post(() -> holder.listener.onRequestPermissionResult(requestCode, result));
                 } else {
-                    MAIN_HANDLER.post(() -> holder.listener.onRequestPermissionResult(requestCode, result));
+                    if (Looper.myLooper() == Looper.getMainLooper()) {
+                        holder.listener.onRequestPermissionResult(requestCode, result);
+                    } else {
+                        MAIN_HANDLER.post(() -> holder.listener.onRequestPermissionResult(requestCode, result));
+                    }
                 }
             }
         }
@@ -469,7 +488,7 @@ public class Shizuku {
      * for complicated requirements.
      * <p>This method is planned to be removed from Shizuku API 14.
      */
-    public static ShizukuRemoteProcess newProcess(@NonNull String[] cmd, @Nullable String[] env, @Nullable String dir) {
+    private static ShizukuRemoteProcess newProcess(@NonNull String[] cmd, @Nullable String[] env, @Nullable String dir) {
         try {
             return new ShizukuRemoteProcess(requireService().newProcess(cmd, env, dir));
         } catch (RemoteException e) {
@@ -659,12 +678,13 @@ public class Shizuku {
             return options;
         }
 
-        private Bundle forRemove() {
+        private Bundle forRemove(boolean remove) {
             Bundle options = new Bundle();
             options.putParcelable(ShizukuApiConstants.USER_SERVICE_ARG_COMPONENT, componentName);
             if (tag != null) {
                 options.putString(ShizukuApiConstants.USER_SERVICE_ARG_TAG, tag);
             }
+            options.putBoolean(ShizukuApiConstants.USER_SERVICE_ARG_REMOVE, remove);
             return options;
         }
     }
@@ -700,6 +720,9 @@ public class Shizuku {
      * will not work. You will need to dig into Android source code to find
      * out how things works, so that you will be able to implement your service
      * safely and elegantly.
+     * <p>
+     * Be aware that, to let the UserService to use the latest code, "Run/Debug congfigurations" -
+     * "Always install with package manager" in Android Studio should be checked.
      *
      * @see UserServiceArgs
      * @since Added from version 10
@@ -760,12 +783,39 @@ public class Shizuku {
     public static void unbindUserService(@NonNull UserServiceArgs args, @Nullable ServiceConnection conn, boolean remove) {
         if (remove) {
             try {
-                requireService().removeUserService(null /* (unused) */, args.forRemove());
+                requireService().removeUserService(null /* (unused) */, args.forRemove(true));
             } catch (RemoteException e) {
                 throw rethrowAsRuntimeException(e);
             }
         } else {
+            /*
+             * When unbindUserService remove=false is called, although the ShizukuServiceConnection
+             * instance is removed from ShizukuServiceConnections, it still exists (since its a Binder),
+             * and it will still receive "connected" "died" from the service, and then call the callback
+             * of its ServiceConnection connections[].
+             * This finally leads to the ServiceConnection#onServiceConnected/onServiceDisconnected being
+             * called multiple times after bindUserService is called later, which is not expected.
+             */
+
             ShizukuServiceConnection connection = ShizukuServiceConnections.get(args);
+
+            /*
+             * For newer versions of the server, we can just call removeUserService with remove=false.
+             * This will not kill the service, but will remove the ShizukuServiceConnection instance
+             * from the server.
+             */
+            if (Shizuku.getVersion() >= 14 || Shizuku.getVersion() == 13 && Shizuku.getServerPatchVersion() >= 4) {
+                try {
+                    requireService().removeUserService(connection, args.forRemove(false));
+                } catch (RemoteException e) {
+                    throw rethrowAsRuntimeException(e);
+                }
+            }
+
+            /*
+             * As a solution for older versions of the server, we can clear the connections[] here.
+             */
+            connection.clearConnections();
             ShizukuServiceConnections.remove(connection);
         }
     }
@@ -889,5 +939,4 @@ public class Shizuku {
     public static int getServerPatchVersion() {
         return serverPatchVersion;
     }
-
 }

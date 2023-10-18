@@ -3,7 +3,8 @@ plugins {
 }
 
 android {
-    compileSdkVersion api_target_sdk
+    namespace 'rikka.shizuku.server'
+    compileSdk api_target_sdk
     defaultConfig {
         minSdkVersion api_min_sdk
         targetSdkVersion api_target_sdk
@@ -30,7 +31,7 @@ dependencies {
     api project(':shared')
     api project(':rish')
 
-    implementation 'dev.rikka.tools.refine:runtime:3.1.1'
-    implementation 'dev.rikka.hidden:compat:3.4.3'
-    compileOnly 'dev.rikka.hidden:stub:3.4.3'
+    implementation libs.refine.runtime
+    implementation libs.hidden.compat
+    compileOnly libs.hidden.stub
 }

@@ -5,6 +5,7 @@ import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_DAEMON;
 import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_DEBUGGABLE;
 import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_NO_CREATE;
 import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_PROCESS_NAME;
+import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_REMOVE;
 import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_TAG;
 import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_USE_32_BIT_APP_PROCESS;
 import static rikka.shizuku.ShizukuApiConstants.USER_SERVICE_ARG_VERSION_CODE;
@@ -15,6 +16,7 @@ import android.content.pm.PackageInfo;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.format.DateUtils;
 import android.util.ArrayMap;
 
 import java.io.OutputStream;
@@ -71,10 +73,20 @@ public abstract class UserServiceManager {
         String tag = options.getString(USER_SERVICE_ARG_TAG);
         String key = packageName + ":" + (tag != null ? tag : className);
 
+        // API < 13.1.4 will not send USER_SERVICE_ARG_REMOVE, true by default
+        boolean remove = true;
+        if (options.containsKey(USER_SERVICE_ARG_REMOVE)) {
+            remove = options.getBoolean(USER_SERVICE_ARG_REMOVE);
+        }
+
         synchronized (this) {
             UserServiceRecord record = getUserServiceRecordLocked(key);
             if (record == null) return 1;
-            removeUserServiceLocked(record);
+            if (remove) {
+                removeUserServiceLocked(record);
+            } else {
+                record.callbacks.unregister(conn);
+            }
         }
         return 0;
     }
@@ -138,7 +150,9 @@ public abstract class UserServiceManager {
 
                 if (newRecord.service != null && newRecord.service.pingBinder()) {
                     newRecord.broadcastBinderReceived();
-                } else {
+                } else if (!newRecord.starting) {
+                    newRecord.setStartingTimeout(DateUtils.SECOND_IN_MILLIS * 30);
+
                     Runnable runnable = () -> startUserService(newRecord, key, newRecord.token, packageName, className, processNameSuffix, uid, use32Bits, debug);
                     executor.execute(runnable);
                     return 0;
@@ -158,7 +172,7 @@ public abstract class UserServiceManager {
         if (record != null) {
             if (record.versionCode != versionCode) {
                 LOGGER.v("Remove service record %s (%s) because version code not matched (old=%d, new=%d)", key, record.token, record.versionCode, versionCode);
-            } else if (record.service == null || !record.service.pingBinder()) {
+            } else if (!record.starting && (record.service == null || !record.service.pingBinder())) {
                 LOGGER.v("Service in record %s (%s) is dead", key, record.token);
             } else {
                 LOGGER.i("Found existing service record %s (%s)", key, record.token);

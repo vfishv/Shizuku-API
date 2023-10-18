@@ -10,9 +10,12 @@ import android.os.RemoteCallbackList;
 import java.util.UUID;
 
 import moe.shizuku.server.IShizukuServiceConnection;
+import rikka.shizuku.server.util.HandlerUtil;
 import rikka.shizuku.server.util.Logger;
 
 public abstract class UserServiceRecord {
+
+    private Runnable startTimeoutCallback;
 
     private class ConnectionList extends RemoteCallbackList<IShizukuServiceConnection> {
 
@@ -35,6 +38,7 @@ public abstract class UserServiceRecord {
     public IBinder service;
     public final RemoteCallbackList<IShizukuServiceConnection> callbacks = new ConnectionList();
     public boolean daemon;
+    public boolean starting;
 
     public UserServiceRecord(int versionCode, boolean daemon) {
         this.versionCode = versionCode;
@@ -46,12 +50,32 @@ public abstract class UserServiceRecord {
         this.daemon = daemon;
     }
 
+    public void setStartingTimeout(long timeoutMillis) {
+        if (starting) {
+            LOGGER.w("Service record %s is already starting", token);
+            return;
+        }
+
+        LOGGER.v("Set starting timeout for service record %s: %d", token, timeoutMillis);
+
+        starting = true;
+        startTimeoutCallback = () -> {
+            if (starting) {
+                LOGGER.w("Service record %s is not started in %d ms", token, timeoutMillis);
+                removeSelf();
+            }
+        };
+        HandlerUtil.getMainHandler().postDelayed(startTimeoutCallback, timeoutMillis);
+    }
+
     public void setDaemon(boolean daemon) {
         this.daemon = daemon;
     }
 
     public void setBinder(IBinder binder) {
         LOGGER.v("Binder received for service record %s", token);
+
+        HandlerUtil.getMainHandler().removeCallbacks(startTimeoutCallback);
 
         service = binder;
 

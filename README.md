@@ -1,6 +1,6 @@
 # Shizuku-API
 
-Shizuku API is the API provided by [Shizuku](https://github.com/RikkaApps/Shizuku) and [Sui](https://github.com/RikkaApps/Sui). With Shizuku API, you can your Java codes (JNI is also supported) as the identity of root or shell (adb).
+Shizuku API is the API provided by [Shizuku](https://github.com/RikkaApps/Shizuku) and [Sui](https://github.com/RikkaApps/Sui). With Shizuku API, you can call your Java/JNI code with root/shell (ADB) identity.
 
 ## Requirements
 
@@ -8,15 +8,15 @@ To use Shizuku APIs, you need to guide the user to install Shizuku or Sui first.
 
 ### Shizuku
 
-Shizuku is a standard Android application. You can guide the user to download Shizuku from https://shizuku.rikka.app/download/. Shizuku works for both rooted and unrooted devices.
+Shizuku is a standard Android application. You can guide the users to download Shizuku from https://shizuku.rikka.app/download/. Shizuku works for both rooted and non-rooted devices.
 
-On unrooted devices, Shizuku needs to manually restart with adb every time on boot. Before Android 11, a computer is required to run adb. Android 11 and above have built-in wireless debugging support, user can start Shizuku directly on the device.
+On non-rooted devices, Shizuku needs to be manually restarted with adb every time on boot. Before Android 11, a computer is required to run adb. Android 11 and above have built-in wireless debugging support, and users can start Shizuku directly on the device.
 
 ### Sui
 
 Sui is a [Magisk](https://github.com/topjohnwu/Magisk) module. Magisk requires an unlocked bootloader.
 
-No additional setup steps are required except for the installation. You can guide rooted users (searching `su` in `PATH` is enough) to download Sui from Magisk or https://github.com/RikkaApps/Sui.
+No additional setup is required except for the installation. You can guide the rooted users (searching `su` in `PATH` is enough) to download Sui from Magisk or https://github.com/RikkaApps/Sui.
 
 ## Demo
 
@@ -24,14 +24,14 @@ A demo project is provided. See [demo](https://github.com/RikkaApps/Shizuku-API/
 
 ## Guide
 
-I'll say the difficult words first, using Shizuku APIs is similar to framework or system app development, some experience in developing common applications may not be applicable. You have to get used to digging into Android source code to find out how things work, [cs.android.com](https://cs.android.com) and AndroidXref sites will be your best friend.
+I'll say the difficult words first, using Shizuku APIs is similar to framework or system app development, some experience in developing common applications may not be enough. You have to get used to digging into Android source code to find out how things work, [cs.android.com](https://cs.android.com) and AndroidXref sites will be your best friend.
 
 ### Add dependency
 
 ![Maven Central](https://img.shields.io/maven-central/v/dev.rikka.shizuku/api)
 
 ```groovy
-def shizuku_version = (the versoin above)
+def shizuku_version = (the version above)
 implementation "dev.rikka.shizuku:api:$shizuku_version"
 
 // Add this line if you want to support Shizuku
@@ -44,7 +44,7 @@ The first step is to acquire the Binder from Shizuku or Sui.
 
 `Shizuku` class provides listeners, `Shizuku#addBinderReceivedListener()` and `Shizuku.addBinderDeadListener()`, that allows you to track the life of the binder. You should call methods in `Shizuku` class when the binder is alive or you will get an `IllegalStateException`.
 
-The steps to get a Binder from Shizuku and Shizuku are different.
+The steps to get a Binder from Sui and Shizuku are different.
 
 #### Sui
 
@@ -98,7 +98,7 @@ protected void onCreate(Bundle savedInstanceState) {
 @Override
 protected void onDestroy() {
     // ...
-    Shizuku.removeRequestPermissionResultListener(REQUEST_PERMISSION_RESULT_LISTENE;
+    Shizuku.removeRequestPermissionResultListener(REQUEST_PERMISSION_RESULT_LISTENER);
     // ...
 }
 
@@ -144,6 +144,8 @@ User Service is like [Bound services](https://developer.android.com/guide/compon
 
 There are no restrictions on non-SDK APIs in the user service process. However, the User Service process is not a valid Android application process. Therefore, even if you can acquire a `Context` instance, many APIs, such as `Context#registerReceiver` and `Context#getContentResolver` will not work. You will need to dig into Android source code to find out how things work.
 
+Be aware that, to let the service to use the latest code, "Run/Debug configurations" - "Always install with package manager" in Android Studio should be checked.
+
 * Start the User Service
 
   Use `bindUserService` method. This method has two parameters, `UserServiceArgs` and `ServiceConnection`.
@@ -170,6 +172,38 @@ We also provides [HiddenApiRefinePlugin](https://github.com/RikkaApps/HiddenApiR
 
 ## Changelog
 
+### 13.1.5
+
+- Fix `ShizukuProvider#requestBinderForNonProviderProcess` crash on Android 14 (for apps targeting Android 14)
+
+### 13.1.4
+
+- Ask the server to remove `ShizukuServiceConnection` if the server is new enough
+
+### 13.1.3
+
+- Fix the problem that `Shizuku#unbindUserService(remove=false)` does not actually remove the callback
+
+### 13.1.2
+
+- Avoid the use of `CopyOnWriteArrayList#removeIf`, as using it with `coreLibraryDesugaring` enabled will crash on Android 8+
+
+### 13.1.1
+
+- Fix `Shizuku#removeXXXListener` will crash on Android 7.1 and earlier versions
+
+  This is caused by `CopyOnWriteArrayList#removeIf` is not supported (throw an `UnsupportedOperationException`) before Android 8.0. Please note, using `coreLibraryDesugaring` will NOT fix this issue at least in version `2.0.3`.
+
+- Prepare to remove `Shizuku#newProcess`, developers should have to use `UserService` instead
+
+  First, this is already announced two years ago.
+
+  For those who don't understand, `UserService` gives the developer the ability to run their own codes in a different process with root or shell privilege. This is much more powerful than just executing a command. `UserService` can replace `newProcess` in all cases.
+
+  Also, `newProcess` uses texts to communicate , which is not efficient and unreliable. If there are apps that only uses `newProcess` to implement its functions, it loses most of the advantage of using Shizuku.
+
+  Finally, `newProcess` lacks tty support, it is not possible to implement an interactive shell with it. And we already has `rish` that allows users to run an interactive shell with privilege in any terminal app they like.
+
 ### 13.1.0
 
 - Breaking change: [desugaring](https://developer.android.com/studio/write/java8-support#library-desugaring) is required if min API of your app is 23
@@ -189,7 +223,7 @@ We also provides [HiddenApiRefinePlugin](https://github.com/RikkaApps/HiddenApiR
   
   You can opt-out this behavior by calling `ShizukuProvider#disableAutomaticSuiInitialization()` before `ShizukuProvider#onCreate()` is called
 
-- Add a lot more detailed document for most APIs
+- Added a lot more detailed document for most APIs
 - Drop pre-v11 support
   
   You don't need to worry about this problem, just show a "not supported" message if the user really uses pre-v11.
@@ -212,9 +246,9 @@ We also provides [HiddenApiRefinePlugin](https://github.com/RikkaApps/HiddenApiR
 
 - Dependency changed (see Guide below)
 - Self-implemented permission is used from v11, the API is the same to runtime permission (see the demo, and existing runtime permission still works)
-- Package name is rename to `rikka.shizuku` (replace all `moe.shizuku.api.` to `rikka.shizuku.`)
+- Package name was renamed to `rikka.shizuku` (replace all `moe.shizuku.api.` to `rikka.shizuku.`)
 - `ShizukuService` class is renamed to `Shizuku`
-- Methods in `Shizuku` class now throw `RuntimeException` rather than `RemoteException` like other Android APIs
+- Methods in `Shizuku` class now throw `RuntimeException` on failure rather than `RemoteException` like other Android APIs
 - Listeners are moved from `ShizukuProvider` class to `Shizuku` class
 
 ### Add support for Sui
