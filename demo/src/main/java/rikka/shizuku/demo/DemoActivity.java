@@ -76,6 +76,15 @@ public class DemoActivity extends Activity {
 
         binding.text1.setText("Waiting for binder");
 
+        int szkVersion = -1;
+        try {
+            szkVersion = Shizuku.getVersion();
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+        if (szkVersion > 0) {
+            binding.btnVersion.setText("Shizuku Version:" + Shizuku.getVersion());
+        }
 
         binding.btn1.setOnClickListener((v) -> {
             try {
